@@ -48,7 +48,6 @@ func main() {
 		// 	case syscall.SIGUSR1:
 		// 		fmt.Println("Received SIGNUSR1 (User defined Signal 1)")
 		// 		fmt.Println("User define function is executed")
-		// 		// continue
 		// 	}
 		// 	// fmt.Println("Graceful exit.")
 		// 	// os.Exit(0)
