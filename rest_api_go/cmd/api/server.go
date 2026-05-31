@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
 	"log"
 	"net/http"
@@ -158,8 +159,8 @@ func studentHeandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Hello PATCH method on Students Route")
 	}
 
-	w.Write([]byte("Hello Students Route"))
-	fmt.Println("Hello Students Route")
+	// w.Write([]byte("Hello Students Route"))
+	// fmt.Println("Hello Students Route")
 }
 
 func execHeandler(w http.ResponseWriter, r *http.Request) {
@@ -181,24 +182,39 @@ func execHeandler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Hello PATCH method on Execs Route")
 	}
 
-	w.Write([]byte("Hello Execs Route"))
-	fmt.Println("Hello Execs Route")
+	// w.Write([]byte("Hello Execs Route"))
+	// fmt.Println("Hello Execs Route")
 }
 
 func main() {
 
 	port := ":3011"
 
-	http.HandleFunc("/", rootHandler)
+	cert := "cert.pem"
+	key := "key.pem"
 
-	http.HandleFunc("/teachers/", treacherHendler)
+	mux := http.NewServeMux()
 
-	http.HandleFunc("/students/", studentHeandler)
+	mux.HandleFunc("/", rootHandler)
 
-	http.HandleFunc("/execs/", execHeandler)
+	mux.HandleFunc("/teachers/", treacherHendler)
+
+	mux.HandleFunc("/students/", studentHeandler)
+
+	mux.HandleFunc("/execs/", execHeandler)
+
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	server := &http.Server{
+		Addr:      port,
+		Handler:   mux,
+		TLSConfig: tlsConfig,
+	}
 
 	fmt.Println("Server port:", port)
-	err := http.ListenAndServe(port, nil)
+	err := server.ListenAndServeTLS(cert, key)
 	if err != nil {
 		log.Fatalln("Error:", err)
 	}
