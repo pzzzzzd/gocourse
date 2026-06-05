@@ -6,6 +6,7 @@ import (
 	"log"
 	"net/http"
 	"restapi/internal/api/middlewares"
+	mw "restapi/internal/api/middlewares"
 	"strings"
 )
 
@@ -211,7 +212,8 @@ func main() {
 	server := &http.Server{
 		Addr: port,
 		// Handler: mux,
-		Handler:   middlewares.SecurityHeaders(mux),
+		// Handler: middlewares.Cors(mux),
+		Handler:   middlewares.SecurityHeaders(mw.Cors(mux)),
 		TLSConfig: tlsConfig,
 	}
 
