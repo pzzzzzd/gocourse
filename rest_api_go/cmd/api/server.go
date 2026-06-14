@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"restapi/internal/api/middlewares"
 	mw "restapi/internal/api/middlewares"
 	"strings"
 )
@@ -213,7 +212,7 @@ func main() {
 		Addr: port,
 		// Handler: mux,
 		// Handler: middlewares.Cors(mux),
-		Handler:   middlewares.SecurityHeaders(mw.Cors(mux)),
+		Handler:   mw.ResponseTimeMiddlewares(mw.SecurityHeaders(mw.Cors(mux))),
 		TLSConfig: tlsConfig,
 	}
 
