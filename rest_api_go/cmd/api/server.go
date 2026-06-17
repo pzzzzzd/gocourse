@@ -7,6 +7,7 @@ import (
 	"net/http"
 	mw "restapi/internal/api/middlewares"
 	"strings"
+	"time"
 )
 
 type user struct {
@@ -208,11 +209,13 @@ func main() {
 		MinVersion: tls.VersionTLS12,
 	}
 
+	rl := mw.NewRateLimiter(5, time.Minute)
+
 	server := &http.Server{
 		Addr: port,
 		// Handler: mux,
 		// Handler: middlewares.Cors(mux),
-		Handler:   mw.Compression(mw.ResponseTimeMiddlewares(mw.SecurityHeaders(mw.Cors(mux)))),
+		Handler:   rl.Middlewares(mw.Compression(mw.ResponseTimeMiddlewares(mw.SecurityHeaders(mw.Cors(mux))))),
 		TLSConfig: tlsConfig,
 	}
 
