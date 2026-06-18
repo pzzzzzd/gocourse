@@ -171,6 +171,16 @@ func execHeandler(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("Hello GET method on Execs Route"))
 		fmt.Println("Hello GET method on Execs Route")
 	case http.MethodPost:
+		fmt.Println("Query:", r.URL.Query())
+		fmt.Println("name:", r.URL.Query().Get("name"))
+
+		err := r.ParseForm()
+		if err != nil {
+			return
+		}
+
+		fmt.Println("Form from POST methods:", r.Form)
+
 		w.Write([]byte("Hello POST method on Execs Route"))
 		fmt.Println("Hello POST method on Execs Route")
 	case http.MethodPut:
@@ -211,11 +221,18 @@ func main() {
 
 	rl := mw.NewRateLimiter(5, time.Minute)
 
+	hppOptions := mw.HPPOptions{
+		CheckQuery:              true,
+		CheckBody:               true,
+		CheckBodyForContentType: "application/x-www-form-urlencoded",
+		Whitelist:               []string{"sortBy", "sortOrder", "name", "age"},
+	}
+
 	server := &http.Server{
 		Addr: port,
 		// Handler: mux,
 		// Handler: middlewares.Cors(mux),
-		Handler:   rl.Middlewares(mw.Compression(mw.ResponseTimeMiddlewares(mw.SecurityHeaders(mw.Cors(mux))))),
+		Handler:   mw.Hpp(hppOptions)(rl.Middlewares(mw.Compression(mw.ResponseTimeMiddlewares(mw.SecurityHeaders(mw.Cors(mux)))))),
 		TLSConfig: tlsConfig,
 	}
 
