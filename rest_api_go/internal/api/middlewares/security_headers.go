@@ -1,9 +1,14 @@
 package middlewares
 
-import "net/http"
+import (
+	"fmt"
+	"net/http"
+)
 
 func SecurityHeaders(next http.Handler) http.Handler {
+	fmt.Println("Security Headers Middleware...")
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("Security Headers Middleware being returned...")
 		w.Header().Set("X-DNS-Prefetch-Control", "off")
 
 		w.Header().Set("X-Frame-Options", "DENY")
@@ -14,6 +19,7 @@ func SecurityHeaders(next http.Handler) http.Handler {
 		w.Header().Set("Referrer-Policy", "no-referrer")
 		w.Header().Set("X-Powered-By", "de-mirage")
 		next.ServeHTTP(w, r)
+		fmt.Println("Security Headers Middleware ends...")
 
 	})
 }
