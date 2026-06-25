@@ -2,10 +2,12 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"fmt"
 	"log"
 	"net/http"
 	mw "restapi/internal/api/middlewares"
+	"strconv"
 	"strings"
 )
 
@@ -15,10 +17,97 @@ import (
 // 	City string `json:"city"`
 // }
 
+type Teascher struct {
+	ID        int
+	FirstName string
+	LastName  string
+	Class     string
+	Subject   string
+}
+
+var (
+	teachers = make(map[int]Teascher)
+	// mutex    = &sync.Mutex{}
+	nextID = 1
+)
+
+func init() {
+	teachers[nextID] = Teascher{
+		ID:        nextID,
+		FirstName: "John",
+		LastName:  "Abduroz",
+		Class:     "11A",
+		Subject:   "Math",
+	}
+	nextID++
+	teachers[nextID] = Teascher{
+		ID:        nextID,
+		FirstName: "Simon",
+		LastName:  "Dedov",
+		Class:     "8B",
+		Subject:   "Language",
+	}
+	nextID++
+	teachers[nextID] = Teascher{
+		ID:        nextID,
+		FirstName: "Ne",
+		LastName:  "Dedov",
+		Class:     "9V",
+		Subject:   "Bio",
+	}
+}
+
 func rootHandler(w http.ResponseWriter, r *http.Request) {
 	// fmt.Fprintf(w, "Hello Root Route")
 	w.Write([]byte("Hello Root Route"))
 	fmt.Println("Hello Root Route")
+}
+
+func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
+
+	path := strings.TrimPrefix(r.URL.Path, "/teachers/")
+	idStr := strings.TrimSuffix(path, "/")
+	fmt.Println(idStr)
+
+	if idStr == "" {
+		firstName := r.URL.Query().Get("first_name")
+		lastName := r.URL.Query().Get("last_name")
+
+		teacherList := make([]Teascher, 0, len(teachers))
+
+		for _, teacher := range teachers {
+			if (firstName == "" || teacher.FirstName == firstName) && (lastName == "" || teacher.LastName == lastName) {
+				teacherList = append(teacherList, teacher)
+			}
+		}
+
+		response := struct {
+			Status string     `json:"status"`
+			Count  int        `json:"count"`
+			Data   []Teascher `json:"data"`
+		}{
+			Status: "success",
+			Count:  len(teacherList),
+			Data:   teacherList,
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(response)
+
+	}
+
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		fmt.Println(err)
+		return
+	}
+
+	teacher, exists := teachers[id]
+	if !exists {
+		http.Error(w, "Teacher not found", http.StatusNotFound)
+		return
+	}
+	json.NewEncoder(w).Encode(teacher)
 }
 
 func treacherHendler(w http.ResponseWriter, r *http.Request) {
@@ -45,26 +134,29 @@ func treacherHendler(w http.ResponseWriter, r *http.Request) {
 		// fmt.Println("Port:", r.URL.Port())
 		// fmt.Println("Schame:", r.URL.Scheme)
 
-		fmt.Println(r.URL.Path)
-		path := strings.TrimPrefix(r.URL.Path, "/teachers/")
-		userID := strings.TrimSuffix(path, "/")
+		// fmt.Println(r.URL.Path)
+		// path := strings.TrimPrefix(r.URL.Path, "/teachers/")
+		// userID := strings.TrimSuffix(path, "/")
 
-		fmt.Println("ID:", userID)
+		// fmt.Println("ID:", userID)
 
-		fmt.Println("Query params:", r.URL.Query())
-		queryParams := r.URL.Query()
-		sortby := queryParams.Get("sortby")
-		key := queryParams.Get("key")
-		sortorder := queryParams.Get("sortorder")
+		// fmt.Println("Query params:", r.URL.Query())
+		// queryParams := r.URL.Query()
+		// sortby := queryParams.Get("sortby")
+		// key := queryParams.Get("key")
+		// sortorder := queryParams.Get("sortorder")
 
-		if sortorder == "" {
-			sortorder = "DESC"
-		}
+		// if sortorder == "" {
+		// 	sortorder = "DESC"
+		// }
 
-		fmt.Printf("Sortby: %v, Sortorder: %v, Key: %v", sortby, sortorder, key)
+		// fmt.Printf("Sortby: %v, Sortorder: %v, Key: %v", sortby, sortorder, key)
 
-		w.Write([]byte("Hello GET method on Teaschers Route"))
+		// w.Write([]byte("Hello GET method on Teaschers Route"))
 		// fmt.Println("Hello GET method on Teaschers Route")
+
+		getTeachersHandler(w, r)
+
 	case http.MethodPost:
 
 		// // parse x-www-...
