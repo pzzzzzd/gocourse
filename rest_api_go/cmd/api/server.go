@@ -5,19 +5,27 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"os"
 	mw "restapi/internal/api/middlewares"
 	"restapi/internal/api/router"
 	"restapi/internal/repository/sqlconnect"
+
+	"github.com/joho/godotenv"
 )
 
 func main() {
 
-	_, err := sqlconnect.ConnectDb("dbeaver_testdb")
+	err := godotenv.Load()
+	if err != nil {
+		return
+	}
+
+	_, err = sqlconnect.ConnectDb()
 	if err != nil {
 		fmt.Println("Error:", err)
 		return
 	}
-	port := ":3011"
+	port := os.Getenv("API_PORT")
 
 	cert := "cert.pem"
 	key := "key.pem"
@@ -47,7 +55,7 @@ func main() {
 		TLSConfig: tlsConfig,
 	}
 
-	fmt.Println("Server port:", port)
+	fmt.Println("Server port", port)
 	err = server.ListenAndServeTLS(cert, key)
 	if err != nil {
 		log.Fatalln("Error:", err)
