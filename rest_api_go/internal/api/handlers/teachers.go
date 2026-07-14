@@ -4,46 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"restapi/internal/models"
 	"restapi/internal/repository/sqlconnect"
 	"strconv"
 	"strings"
-	"sync"
 )
-
-var (
-	teachers = make(map[int]models.Teacher)
-	mutex    = &sync.Mutex{}
-	nextID   = 1
-)
-
-// func init() {
-// 	teachers[nextID] = models.Teacher{
-// 		ID:        nextID,
-// 		FirstName: "John",
-// 		LastName:  "Abduroz",
-// 		Class:     "11A",
-// 		Subject:   "Math",
-// 	}
-// 	nextID++
-// 	teachers[nextID] = models.Teacher{
-// 		ID:        nextID,
-// 		FirstName: "Simon",
-// 		LastName:  "Dedov",
-// 		Class:     "8B",
-// 		Subject:   "Language",
-// 	}
-// 	nextID++
-// 	teachers[nextID] = models.Teacher{
-// 		ID:        nextID,
-// 		FirstName: "Ne",
-// 		LastName:  "Dedov",
-// 		Class:     "9V",
-// 		Subject:   "Bio",
-// 	}
-// 	nextID++
-// }
 
 func TeacherHendler(w http.ResponseWriter, r *http.Request) {
 
@@ -54,8 +21,7 @@ func TeacherHendler(w http.ResponseWriter, r *http.Request) {
 	case http.MethodPost:
 		addTeacherHandler(w, r)
 	case http.MethodPut:
-		w.Write([]byte("Hello PUT method on Teachers Route"))
-		fmt.Println("Hello PUT method on Teachers Route")
+		updateTeacherHandler(w, r)
 	case http.MethodPatch:
 		w.Write([]byte("Hello PATCH method on Teachers Route"))
 		fmt.Println("Hello PATCH method on Teachers Route")
@@ -64,6 +30,22 @@ func TeacherHendler(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("Hello PATCH method on Teachers Route")
 	}
 
+}
+
+func isValidSortOrder(order string) bool {
+	return order == "asc" || order == "desc"
+}
+
+func isValidSortField(field string) bool {
+	validFields := map[string]bool{
+		"first_name": true,
+		"last_name":  true,
+		"email":      true,
+		"class":      true,
+		"subject":    true,
+		"id":         true,
+	}
+	return validFields[field]
 }
 
 func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
@@ -86,6 +68,8 @@ func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
 		var args []interface{}
 
 		query, args = addFilters(r, query, args)
+
+		query = addSorting(r, query)
 
 		rows, err := db.Query(query, args...)
 		if err != nil {
@@ -141,6 +125,28 @@ func getTeachersHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(teacher)
+}
+
+func addSorting(r *http.Request, query string) string {
+	sortParams := r.URL.Query()["sortby"]
+	if len(sortParams) > 0 {
+		query += " ORDER BY"
+		for i, param := range sortParams {
+			parts := strings.Split(param, ":")
+			if len(parts) != 2 {
+				continue
+			}
+			field, order := parts[0], parts[1]
+			if !isValidSortField(field) || !isValidSortOrder(order) {
+				continue
+			}
+			if i > 0 {
+				query += ","
+			}
+			query += " " + field + " " + order
+		}
+	}
+	return query
 }
 
 func addFilters(r *http.Request, query string, args []interface{}) (string, []interface{}) {
@@ -225,5 +231,58 @@ func addTeacherHandler(w http.ResponseWriter, r *http.Request) {
 		Data:   addedTeachers,
 	}
 	json.NewEncoder(w).Encode(response)
+
+}
+
+func updateTeacherHandler(w http.ResponseWriter, r *http.Request) {
+	idStr := strings.TrimPrefix(r.URL.Path, "/teachers/")
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Invalid Teacher ID", http.StatusBadRequest)
+		return
+	}
+
+	var updatedTeacher models.Teacher
+	err = json.NewDecoder(r.Body).Decode(&updatedTeacher)
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Invalid Request Payload", http.StatusBadRequest)
+		return
+	}
+
+	db, err := sqlconnect.ConnectDb()
+	if err != nil {
+		log.Println(err)
+		http.Error(w, "Unable to connect to database", http.StatusInternalServerError)
+		return
+	}
+	defer db.Close()
+
+	var existingTeacher models.Teacher
+	err = db.QueryRow("SELECT id, first_name, last_name, email, class, subject FROM teachers WHERE id = ?", id).Scan(&existingTeacher.ID, &existingTeacher.FirstName, &existingTeacher.LastName,
+		&existingTeacher.Email, &existingTeacher.Class, &existingTeacher.Subject)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			log.Println(err)
+			http.Error(w, "Teacher not found", http.StatusNotFound)
+			return
+		}
+		log.Println(err)
+
+		return
+	}
+
+	updatedTeacher.ID = existingTeacher.ID
+	_, err = db.Exec("UPDATE teachers SET first_name = ?, last_name = ?, email = ?, class = ?, subject = ? WHERE id = ?", updatedTeacher.FirstName, updatedTeacher.LastName, updatedTeacher.Email,
+		updatedTeacher.Class, updatedTeacher.Subject, updatedTeacher.ID)
+	if err == sql.ErrNoRows {
+		log.Println(err)
+		http.Error(w, "Error updating teacher", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(updatedTeacher)
 
 }
