@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"reflect"
 	"restapi/internal/models"
+	"restapi/pkg/utils"
 	"strconv"
 	"strings"
 )
@@ -71,7 +72,7 @@ func addFilters(r *http.Request, query string, args []interface{}) (string, []in
 func GetTeachersDbHandler(teachers []models.Teacher, r *http.Request) ([]models.Teacher, error) {
 	db, err := ConnectDb()
 	if err != nil {
-		return nil, err
+		return nil, utils.ErrorHandler(err, "error retrieving data")
 	}
 
 	defer db.Close()
@@ -86,7 +87,7 @@ func GetTeachersDbHandler(teachers []models.Teacher, r *http.Request) ([]models.
 	rows, err := db.Query(query, args...)
 	if err != nil {
 		fmt.Println(err)
-		return nil, err
+		return nil, utils.ErrorHandler(err, "error retrieving data")
 	}
 	defer rows.Close()
 
@@ -104,7 +105,7 @@ func GetTeachersDbHandler(teachers []models.Teacher, r *http.Request) ([]models.
 func GetTeacherByID(id int) (models.Teacher, error) {
 	db, err := ConnectDb()
 	if err != nil {
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error retrieving data")
 	}
 
 	defer db.Close()
@@ -113,10 +114,9 @@ func GetTeacherByID(id int) (models.Teacher, error) {
 	err = db.QueryRow("SELECT id, first_name, last_name, email, class, subject FROM teachers WHERE id = ?", id).Scan(&teacher.ID, &teacher.FirstName, &teacher.LastName,
 		&teacher.Email, &teacher.Class, &teacher.Subject)
 	if err == sql.ErrNoRows {
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error retrieving data")
 	} else if err != nil {
-		fmt.Println(err)
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error retrieving data")
 	}
 	return teacher, nil
 }
@@ -124,25 +124,28 @@ func GetTeacherByID(id int) (models.Teacher, error) {
 func AddTeachersDbHandler(newTeachers []models.Teacher) ([]models.Teacher, error) {
 	db, err := ConnectDb()
 	if err != nil {
-		return nil, err
+		return nil, utils.ErrorHandler(err, "error adding data 1")
 	}
 
 	defer db.Close()
 
-	stmt, err := db.Prepare("INSERT INTO teachers (first_name, last_name, email, class, subject) VALUES (?,?,?,?,?)")
+	// stmt, err := db.Prepare("INSERT INTO teachers (first_name, last_name, email, class, subject) VALUES (?,?,?,?,?)")
+	stmt, err := db.Prepare(generateInsertQuery(models.Teacher{}))
 	if err != nil {
-		return nil, err
+		return nil, utils.ErrorHandler(err, "error adding data 2")
 	}
 
 	addedTeachers := make([]models.Teacher, len(newTeachers))
 	for i, newTeacher := range newTeachers {
-		res, err := stmt.Exec(newTeacher.FirstName, newTeacher.LastName, newTeacher.Email, newTeacher.Class, newTeacher.Subject)
+		// res, err := stmt.Exec(newTeacher.FirstName, newTeacher.LastName, newTeacher.Email, newTeacher.Class, newTeacher.Subject)
+		values := getStructValues(newTeacher)
+		res, err := stmt.Exec(values...)
 		if err != nil {
-			return nil, err
+			return nil, utils.ErrorHandler(err, "error adding data 3")
 		}
 		lastID, err := res.LastInsertId()
 		if err != nil {
-			return nil, err
+			return nil, utils.ErrorHandler(err, "error adding data 4")
 		}
 		newTeacher.ID = int(lastID)
 		addedTeachers[i] = newTeacher
@@ -150,10 +153,44 @@ func AddTeachersDbHandler(newTeachers []models.Teacher) ([]models.Teacher, error
 	return addedTeachers, nil
 }
 
+func generateInsertQuery(model interface{}) string {
+	modelType := reflect.TypeOf(model)
+	var columns, placeholders string
+	for i := 0; i < modelType.NumField(); i++ {
+		dbTag := modelType.Field(i).Tag.Get("db")
+		fmt.Println("dbTag:", dbTag)
+		dbTag = strings.TrimSuffix(dbTag, ",omitempty")
+		if dbTag != "" && dbTag != "id" {
+			if columns != "" {
+				columns += ", "
+				placeholders += ", "
+			}
+			columns += dbTag
+			placeholders += "?"
+		}
+	}
+	fmt.Printf("INSERT INTO teachers (%s) VALUES (%s)\n", columns, placeholders)
+	return fmt.Sprintf("INSERT INTO teachers (%s) VALUES (%s)", columns, placeholders)
+}
+
+func getStructValues(model interface{}) []interface{} {
+	modelValue := reflect.ValueOf(model)
+	modelType := modelValue.Type()
+	values := []interface{}{}
+	for i := 0; i < modelType.NumField(); i++ {
+		dbTag := modelType.Field(i).Tag.Get("db")
+		if dbTag != "" && dbTag != "id,omitempty" {
+			values = append(values, modelValue.Field(i).Interface())
+		}
+	}
+	log.Println("Values:", values)
+	return values
+}
+
 func UpdateTeacher(id int, updatedTeacher models.Teacher) (models.Teacher, error) {
 	db, err := ConnectDb()
 	if err != nil {
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error updating data")
 	}
 	defer db.Close()
 
@@ -162,16 +199,16 @@ func UpdateTeacher(id int, updatedTeacher models.Teacher) (models.Teacher, error
 		&existingTeacher.Email, &existingTeacher.Class, &existingTeacher.Subject)
 	if err != nil {
 		if err == sql.ErrNoRows {
-			return models.Teacher{}, err
+			return models.Teacher{}, utils.ErrorHandler(err, "error updating data")
 		}
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error updating data")
 	}
 
 	updatedTeacher.ID = existingTeacher.ID
 	_, err = db.Exec("UPDATE teachers SET first_name = ?, last_name = ?, email = ?, class = ?, subject = ? WHERE id = ?", updatedTeacher.FirstName, updatedTeacher.LastName, updatedTeacher.Email,
 		updatedTeacher.Class, updatedTeacher.Subject, updatedTeacher.ID)
 	if err == sql.ErrNoRows {
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error updating data")
 	}
 	return updatedTeacher, nil
 }
@@ -179,26 +216,26 @@ func UpdateTeacher(id int, updatedTeacher models.Teacher) (models.Teacher, error
 func PatchTeachers(updates []map[string]interface{}) error {
 	db, err := ConnectDb()
 	if err != nil {
-		return err
+		return utils.ErrorHandler(err, "Invalid ID")
 	}
 	defer db.Close()
 
 	tx, err := db.Begin()
 	if err != nil {
-		return err
+		return utils.ErrorHandler(err, "Invalid ID")
 	}
 
 	for _, update := range updates {
 		idStr, ok := update["id"].(string)
 		if !ok {
 			tx.Rollback()
-			return err
+			return utils.ErrorHandler(err, "Invalid ID")
 		}
 
 		id, err := strconv.Atoi(idStr)
 		if err != nil {
 			tx.Rollback()
-			return err
+			return utils.ErrorHandler(err, "Invalid ID")
 		}
 
 		var teacherFromDb models.Teacher
@@ -211,9 +248,9 @@ func PatchTeachers(updates []map[string]interface{}) error {
 			log.Println(err)
 			tx.Rollback()
 			if err == sql.ErrNoRows {
-				return err
+				return utils.ErrorHandler(err, "Teacher not found")
 			}
-			return err
+			return utils.ErrorHandler(err, "Invalid ID")
 		}
 
 		teacherVal := reflect.ValueOf(&teacherFromDb).Elem()
@@ -234,7 +271,7 @@ func PatchTeachers(updates []map[string]interface{}) error {
 						} else {
 							tx.Rollback()
 							log.Printf("Cant convert %v to %v\n", val.Type(), fieldVal.Type())
-							return err
+							return utils.ErrorHandler(err, "Invalid ID")
 						}
 
 					}
@@ -246,13 +283,13 @@ func PatchTeachers(updates []map[string]interface{}) error {
 			teacherFromDb.Class, teacherFromDb.Subject, teacherFromDb.ID)
 		if err != nil {
 			tx.Rollback()
-			return err
+			return utils.ErrorHandler(err, "error updating data")
 		}
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		return err
+		return utils.ErrorHandler(err, "error updating data")
 	}
 	return nil
 }
@@ -261,7 +298,7 @@ func PatchOneTeacher(id int, updates map[string]interface{}) (models.Teacher, er
 	db, err := ConnectDb()
 	if err != nil {
 		log.Println(err)
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error updating data")
 	}
 	defer db.Close()
 
@@ -271,11 +308,9 @@ func PatchOneTeacher(id int, updates map[string]interface{}) (models.Teacher, er
 	if err != nil {
 		if err == sql.ErrNoRows {
 			log.Println(err)
-			return models.Teacher{}, err
+			return models.Teacher{}, utils.ErrorHandler(err, "Teacher not found")
 		}
-		log.Println(err)
-
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error updating data")
 	}
 
 	teacherVal := reflect.ValueOf(&existingTeacher).Elem()
@@ -301,7 +336,7 @@ func PatchOneTeacher(id int, updates map[string]interface{}) (models.Teacher, er
 	if err == sql.ErrNoRows {
 		log.Println(err)
 
-		return models.Teacher{}, err
+		return models.Teacher{}, utils.ErrorHandler(err, "error updating data")
 	}
 	return existingTeacher, nil
 }
@@ -310,22 +345,22 @@ func DeleteOneTeacher(id int) error {
 	db, err := ConnectDb()
 	if err != nil {
 		log.Println(err)
-		return err
+		return utils.ErrorHandler(err, "error deleting teacher")
 	}
 	defer db.Close()
 
 	result, err := db.Exec("DELETE FROM teachers WHERE id = ?", id)
 	if err != nil {
-		return err
+		return utils.ErrorHandler(err, "error deleting teacher")
 	}
 
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
-		return err
+		return utils.ErrorHandler(err, "error deleting teacher")
 	}
 
 	if rowsAffected == 0 {
-		return err
+		return utils.ErrorHandler(err, "Teacher not found")
 	}
 	return nil
 }
@@ -334,21 +369,21 @@ func DeleteTeachers(ids []int) ([]int, error) {
 	db, err := ConnectDb()
 	if err != nil {
 		log.Println(err)
-		return nil, err
+		return nil, utils.ErrorHandler(err, "error deleting teacher")
 	}
 	defer db.Close()
 
 	tx, err := db.Begin()
 	if err != nil {
 		log.Println(err)
-		return nil, err
+		return nil, utils.ErrorHandler(err, "error deleting teacher")
 	}
 
 	stmt, err := tx.Prepare("DELETE FROM teachers WHERE id = ?")
 	if err != nil {
 		log.Println(err)
 		tx.Rollback()
-		return nil, err
+		return nil, utils.ErrorHandler(err, "error deleting teacher")
 	}
 	defer stmt.Close()
 
@@ -359,14 +394,14 @@ func DeleteTeachers(ids []int) ([]int, error) {
 			tx.Rollback()
 			log.Println(err)
 
-			return nil, err
+			return nil, utils.ErrorHandler(err, "error deleting teacher")
 		}
 
 		rowsAffected, err := result.RowsAffected()
 		if err != nil {
 			tx.Rollback()
 
-			return nil, err
+			return nil, utils.ErrorHandler(err, "error deleting teacher")
 		}
 		if rowsAffected > 0 {
 			deletedIds = append(deletedIds, id)
@@ -374,7 +409,7 @@ func DeleteTeachers(ids []int) ([]int, error) {
 		if rowsAffected < 1 {
 			tx.Rollback()
 
-			return nil, err
+			return nil, utils.ErrorHandler(err, fmt.Sprintf("ID %d not found", id))
 		}
 
 	}
@@ -383,12 +418,12 @@ func DeleteTeachers(ids []int) ([]int, error) {
 	if err != nil {
 		log.Println(err)
 
-		return nil, err
+		return nil, utils.ErrorHandler(err, "error deleting teacher")
 	}
 
 	if len(deletedIds) < 1 {
 
-		return nil, err
+		return nil, utils.ErrorHandler(err, "IDs do not found")
 	}
 	return deletedIds, nil
 }
