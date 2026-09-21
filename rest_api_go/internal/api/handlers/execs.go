@@ -247,7 +247,7 @@ func LoginHandler(w http.ResponseWriter, r *http.Request) {
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     "test",
-		Value:    "testing",
+		Value:    "testing123",
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   true,
