@@ -1,22 +1,16 @@
 package handlers
 
 import (
-	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
-	"os"
 	"restapi/internal/models"
 	"restapi/internal/repository/sqlconnect"
 	"restapi/pkg/utils"
 	"strconv"
 	"time"
-
-	"github.com/go-mail/mail/v2"
 )
 
 func GetExecsHandler(w http.ResponseWriter, r *http.Request) {
@@ -335,65 +329,40 @@ func ForgotPasswordHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	r.Body.Close()
 
-	db, err := sqlconnect.ConnectDb()
+	err = sqlconnect.ForgotPasswordDbHandler(req.Email)
 	if err != nil {
-		utils.ErrorHandler(err, "internal error")
-		return
-	}
-	defer db.Close()
-
-	var exec models.Exec
-	err = db.QueryRow("SELECT id FROM execs WHERE email = ?", req.Email).Scan(&exec.ID)
-	if err != nil {
-		utils.ErrorHandler(err, "user not found")
-		return
-	}
-
-	duration, err := strconv.Atoi(os.Getenv("RESET_TOKEN_EXP_DURATION"))
-	if err != nil {
-		utils.ErrorHandler(err, "failed to send password reset email")
-		return
-	}
-	mins := time.Duration(duration)
-
-	expiry := time.Now().Add(mins * time.Minute).Format(time.RFC3339)
-
-	tokenBytes := make([]byte, 32)
-	_, err = rand.Read(tokenBytes)
-	if err != nil {
-		utils.ErrorHandler(err, "failed to send password reset email")
-		return
-	}
-
-	log.Println("tokenBytes:", tokenBytes)
-	token := hex.EncodeToString(tokenBytes)
-	log.Println("token:", token)
-
-	hashedToken := sha256.Sum256(tokenBytes)
-
-	hashedTokenString := hex.EncodeToString(hashedToken[:])
-
-	_, err = db.Exec("UPDATE execs SET password_reset_token = ?, password_token_expires = ? WHERE id = ?", hashedTokenString, expiry, exec.ID)
-	if err != nil {
-		utils.ErrorHandler(err, "Failed to send password reset email")
-		return
-	}
-
-	resetURL := fmt.Sprintf("https://localhost:3000/execs/resetpassword/reset/%s", token)
-	message := fmt.Sprintf("Forgot your password? Reset your password using the following link: \n%s\nIf you didn't request a password reset, please ignore this email. This link is only valid for %d minutes.", resetURL, int(mins))
-
-	m := mail.NewMessage()
-	m.SetHeader("From", "schooladmin@school.com")
-	m.SetHeader("To", req.Email)
-	m.SetHeader("Subject", "Your password reset link")
-	m.SetBody("text/plain", message)
-
-	d := mail.NewDialer("localhost", 1025, "", "")
-	err = d.DialAndSend(m)
-	if err != nil {
-		utils.ErrorHandler(err, "Failed to send password reset email")
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	fmt.Fprintf(w, "Password reset link sent to %s", req.Email)
+}
+
+func ResetPasswordHandler(w http.ResponseWriter, r *http.Request) {
+	token := r.PathValue("resetcode")
+
+	var req struct {
+		NewPassword     string `json:"new_password"`
+		ConfirmPassword string `json:"confirm_password"`
+	}
+
+	err := json.NewDecoder(r.Body).Decode(&req)
+	if err != nil {
+		http.Error(w, "invalid values in request", http.StatusBadRequest)
+		return
+	}
+
+	if req.NewPassword != req.ConfirmPassword {
+		http.Error(w, "password should match", http.StatusBadRequest)
+		return
+	}
+
+	err = sqlconnect.ResetPasswordDbHandler(token, req.NewPassword)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	fmt.Fprintln(w, "Password reset successfully")
+
 }
