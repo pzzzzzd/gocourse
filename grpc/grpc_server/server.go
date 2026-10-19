@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"net"
 
 	pb "simplegrpcserver/proto/gen"
+	farewellpb "simplegrpcserver/proto/gen/farewell"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
@@ -13,6 +15,13 @@ import (
 
 type server struct {
 	pb.UnimplementedCalculateServer
+	pb.UnimplementedGreeterServer
+	pb.BigFarewellServer
+	// farewellpb.UnimplementedAufWiedersehenServer
+}
+
+type serverGreeter struct {
+	pb.UnimplementedGreeterServer
 }
 
 func (s *server) Add(ctx context.Context, req *pb.AddRequest) (*pb.AddResponse, error) {
@@ -21,6 +30,29 @@ func (s *server) Add(ctx context.Context, req *pb.AddRequest) (*pb.AddResponse, 
 	log.Println("Sum:", sum)
 	return &pb.AddResponse{
 		Sum: sum,
+	}, nil
+}
+
+func (s *serverGreeter) Add(ctx context.Context, req *pb.HelloRequest) (*pb.HelloResponse, error) {
+	return &pb.HelloResponse{
+		Message: fmt.Sprintf("Hello %s. Nice to receive request from you", req.Name),
+	}, nil
+}
+
+// func (s *serverGreeter) Greet(ctx context.Context, req *pb.AddRequest) (*pb.AddResponse, error) {
+// 	// return &pb.HelloResponse{
+// 	// 	Message: fmt.Sprintf("Hello %s. Nice to receive request from you", req.Name),
+// 	// }, nil
+// 	sum := req.A + req.B
+// 	log.Println("Sum:", sum)
+// 	return &pb.AddResponse{
+// 		Sum: sum,
+// 	}, nil
+// }
+
+func (s *server) BidGoodBye(ctx context.Context, req *farewellpb.GoodByeRequest) (*farewellpb.GoodByeResponse, error) {
+	return &farewellpb.GoodByeResponse{
+		Message: fmt.Sprintf("Goodbye %s!. Nice to have received request from you. Farewell my friend!", req.Name),
 	}, nil
 }
 
@@ -42,6 +74,9 @@ func main() {
 	grpcServer := grpc.NewServer(grpc.Creds(creds))
 
 	pb.RegisterCalculateServer(grpcServer, &server{})
+	pb.RegisterGreeterServer(grpcServer, &serverGreeter{})
+	pb.RegisterBigFarewellServer(grpcServer, &server{})
+	// farewellpb.RegisterAufWiedersehenServer(grpcServer, &server{})
 
 	log.Println("Server is running on port", port)
 	err = grpcServer.Serve(lis)
