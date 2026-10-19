@@ -2,10 +2,22 @@ syntax = "proto3";
 
 package calculator;
 
+import "farewell/farewell.proto";
+import "greeter.proto";
+
 option go_package = "/proto/gen;mainapipb";
 
 service Calculate {
   rpc Add(AddRequest) returns (AddResponse);
+}
+
+service Greeter {
+  rpc Greet(HelloRequest) returns (HelloResponse);
+  rpc Add(HelloRequest) returns (HelloResponse);
+}
+
+service BigFarewell {
+  rpc BidGoodBye(farewell.GoodByeRequest) returns (farewell.GoodByeResponse);
 }
 
 message AddRequest {
