@@ -64,4 +64,40 @@ func main() {
 	}
 	log.Println("SUM:", res.Sum)
 
+	chatStream, err := client.Chat(ctx)
+	if err != nil {
+		log.Fatalln("Error creating chat stream:", err)
+	}
+
+	waitc := make(chan struct{})
+
+	go func() {
+		messages := []string{"Hello", "How are you?", "Goodbye"}
+		for _, message := range messages {
+			log.Println("Sending message:", message)
+			err := chatStream.Send(&mainpb.ChatMessage{Message: message})
+			if err != nil {
+				log.Fatalln(err)
+			}
+			time.Sleep(time.Second)
+		}
+		chatStream.CloseSend()
+	}()
+
+	go func() {
+		for {
+			res, err := chatStream.Recv()
+			if err == io.EOF {
+				log.Println("End of stream")
+				break
+			}
+			if err != nil {
+				log.Fatalln("Error receiving data from GenerateFibonacci func:", err)
+			}
+			log.Println("Received response: ", res.GetMessage())
+		}
+		close(waitc)
+	}()
+	<-waitc
+
 }
