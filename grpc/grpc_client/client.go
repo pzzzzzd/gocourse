@@ -9,6 +9,7 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/metadata"
 )
 
 func main() {
@@ -20,7 +21,7 @@ func main() {
 		log.Fatalln("Did not connect:", err)
 	}
 
-	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(creds))
+	conn, err := grpc.NewClient("localhost:50051", grpc.WithTransportCredentials(creds)) //, grpc.WithDefaultCallOptions(grpc.UseCompressor(gzip.Name)))
 	if err != nil {
 		log.Fatalln("Did not connect:", err)
 	}
@@ -28,7 +29,7 @@ func main() {
 
 	client := mainapipb.NewCalculateClient(conn)
 
-	client2 := mainapipb.NewGreeterClient(conn)
+	// client2 := mainapipb.NewGreeterClient(conn)
 
 	// fwClient := farewellpb.NewAufWiedersehenClient(conn)
 	client3 := mainapipb.NewBigFarewellClient(conn)
@@ -39,23 +40,31 @@ func main() {
 		A: 10,
 		B: 20,
 	}
-	res, err := client.Add(ctx, req)
+	md := metadata.Pairs("authorization", "Bearer=qgirorweghi4232tw", "test", "testing", "test2", "testing2")
+	ctx = metadata.NewOutgoingContext(ctx, md)
+	var resHeader metadata.MD
+	var resTrailer metadata.MD
+	res, err := client.Add(ctx, req, grpc.Header(&resHeader), grpc.Trailer(&resTrailer))
 	if err != nil {
 		log.Fatalln("Could not add", err)
 	}
+	log.Println("resHeader:", resHeader)
+	log.Println("resHeader[test]", resHeader["test"][0])
+	log.Println("resTrailer:", resTrailer)
+	log.Println("resTrailer[testTrailer]:", resTrailer["testTrailer"])
 
-	reqGreet := &mainapipb.HelloRequest{
-		Name: "John",
-	}
-	res1, err := client2.Greet(ctx, reqGreet)
-	if err != nil {
-		log.Fatalln("Could not greet", err)
-	}
+	// reqGreet := &mainapipb.HelloRequest{
+	// 	Name: "John",
+	// }
+	// res1, err := client2.Greet(ctx, reqGreet)
+	// if err != nil {
+	// 	log.Fatalln("Could not greet", err)
+	// }
 
-	resAddFromGreeter, err := client2.Add(ctx, reqGreet)
-	if err != nil {
-		log.Fatalln("Could not add---", err)
-	}
+	// resAddFromGreeter, err := client2.Add(ctx, reqGreet)
+	// if err != nil {
+	// 	log.Fatalln("Could not add---", err)
+	// }
 
 	reqGoodBye := &farewellpb.GoodByeRequest{
 		Name: "Jane",
@@ -71,11 +80,11 @@ func main() {
 	}
 
 	log.Println("Sum:", res.Sum)
-	log.Println("Greeting message:", res1.Message)
-	log.Println("===============Greeting message from the second Add func in proto:", resAddFromGreeter.Message)
+	// log.Println("Greeting message:", res1.Message)
+	// log.Println("===============Greeting message from the second Add func in proto:", resAddFromGreeter.Message)
 	// log.Println("Goodbye message:", resFw.Message)
 	log.Println("Goodbye message:", res3.Message)
-	state := conn.GetState()
-	log.Println("Connection State:", state)
+	// state := conn.GetState()
+	// log.Println("Connection State:", state)
 
 }
